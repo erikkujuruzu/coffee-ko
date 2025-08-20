@@ -1,252 +1,197 @@
+import { Picker } from "@react-native-picker/picker";
 import React, { useState } from "react";
 import {
-    SectionList,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  Button,
+  SectionList,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from "react-native";
 
-type Item = {
+type InventoryItem = {
   id: string;
   name: string;
-  stock: number;
+  quantity: number;
+  category: string;
 };
 
-type Category = {
-  title: string;
-  data: Item[];
-};
+const categories = ["Coffee", "Pastries", "Snacks", "Drinks"];
 
-export default function Inventory() {
-  const [categories, setCategories] = useState<Category[]>([
-    {
-      title: "Coffee",
-      data: [
-        { id: "1", name: "Espresso Beans", stock: 50 },
-        { id: "2", name: "Arabica Beans", stock: 30 },
-      ],
-    },
-    {
-      title: "Ingredients",
-      data: [
-        { id: "3", name: "Milk (Liters)", stock: 20 },
-        { id: "4", name: "Sugar (kg)", stock: 15 },
-      ],
-    },
-    {
-      title: "Pastries",
-      data: [
-        { id: "5", name: "Croissants", stock: 10 },
-        { id: "6", name: "Muffins", stock: 8 },
-      ],
-    },
-  ]);
+export default function InventoryScreen() {
+  const [inventory, setInventory] = useState<InventoryItem[]>([]);
+  const [newItem, setNewItem] = useState("");
+  const [newQuantity, setNewQuantity] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState(categories[0]);
+  const [search, setSearch] = useState("");
 
-  const [newItemName, setNewItemName] = useState("");
-  const [newItemStock, setNewItemStock] = useState("");
-  const [newItemCategory, setNewItemCategory] = useState("Coffee");
-
-  // ➕ Add item
   const addItem = () => {
-    if (
-      newItemName.trim() === "" ||
-      newItemStock.trim() === "" ||
-      newItemCategory.trim() === ""
-    )
-      return;
-
-    const newItem: Item = {
-      id: Date.now().toString(),
-      name: newItemName,
-      stock: parseInt(newItemStock, 10),
+    if (newItem.trim() === "" || newQuantity === "") return;
+    const item: InventoryItem = {
+      id: Math.random().toString(),
+      name: newItem,
+      quantity: parseInt(newQuantity),
+      category: selectedCategory,
     };
-
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.title === newItemCategory
-          ? { ...cat, data: [...cat.data, newItem] }
-          : cat
-      )
-    );
-
-    setNewItemName("");
-    setNewItemStock("");
+    setInventory((prev) => [...prev, item]);
+    setNewItem("");
+    setNewQuantity("");
   };
 
-  // ❌ Remove item
-  const removeItem = (categoryTitle: string, id: string) => {
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.title === categoryTitle
-          ? { ...cat, data: cat.data.filter((item) => item.id !== id) }
-          : cat
+  const updateQuantity = (id: string, change: number) => {
+    setInventory((prev) =>
+      prev.map((item) =>
+        item.id === id
+          ? { ...item, quantity: Math.max(0, item.quantity + change) }
+          : item
       )
     );
   };
 
-  // 🔼 Increase stock
-  const increaseStock = (categoryTitle: string, id: string) => {
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.title === categoryTitle
-          ? {
-              ...cat,
-              data: cat.data.map((item) =>
-                item.id === id ? { ...item, stock: item.stock + 1 } : item
-              ),
-            }
-          : cat
-      )
-    );
-  };
+  const filteredInventory = inventory.filter((item) =>
+    item.name.toLowerCase().includes(search.toLowerCase())
+  );
 
-  // 🔽 Decrease stock
-  const decreaseStock = (categoryTitle: string, id: string) => {
-    setCategories((prev) =>
-      prev.map((cat) =>
-        cat.title === categoryTitle
-          ? {
-              ...cat,
-              data: cat.data.map((item) =>
-                item.id === id && item.stock > 0
-                  ? { ...item, stock: item.stock - 1 }
-                  : item
-              ),
-            }
-          : cat
-      )
-    );
-  };
+  const groupedInventory = categories.map((cat) => ({
+    title: cat,
+    data: filteredInventory.filter((item) => item.category === cat),
+  }));
 
   return (
     <View style={styles.container}>
-      <Text style={styles.header}>Inventory</Text>
+      <Text style={styles.title}>📦 Inventory</Text>
 
-      {/* Add Item Form */}
-      <View style={styles.form}>
-        <TextInput
-          style={styles.input}
-          placeholder="Item Name"
-          value={newItemName}
-          onChangeText={setNewItemName}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Stock Quantity"
-          keyboardType="numeric"
-          value={newItemStock}
-          onChangeText={setNewItemStock}
-        />
-        <TextInput
-          style={styles.input}
-          placeholder="Category (Coffee, Ingredients, Pastries)"
-          value={newItemCategory}
-          onChangeText={setNewItemCategory}
-        />
-        <TouchableOpacity style={styles.addBtn} onPress={addItem}>
-          <Text style={styles.addText}>Add Item</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Search Bar */}
+      <TextInput
+        placeholder="🔍 Search items..."
+        style={styles.searchInput}
+        value={search}
+        onChangeText={setSearch}
+      />
 
-      {/* Sectioned Inventory List */}
+      {/* Add New Item */}
+      <TextInput
+        placeholder="Item name"
+        style={styles.input}
+        value={newItem}
+        onChangeText={setNewItem}
+      />
+      <TextInput
+        placeholder="Quantity"
+        style={styles.input}
+        keyboardType="numeric"
+        value={newQuantity}
+        onChangeText={setNewQuantity}
+      />
+
+      {/* Category Picker */}
+      <Picker
+        selectedValue={selectedCategory}
+        style={styles.picker}
+        onValueChange={(value) => setSelectedCategory(value)}
+      >
+        {categories.map((cat) => (
+          <Picker.Item key={cat} label={cat} value={cat} />
+        ))}
+      </Picker>
+
+      <Button title="➕ Add Item" onPress={addItem} />
+
+      {/* Inventory List */}
       <SectionList
-        sections={categories}
+        sections={groupedInventory}
         keyExtractor={(item) => item.id}
-        renderSectionHeader={({ section: { title } }) => (
-          <Text style={styles.sectionHeader}>{title}</Text>
-        )}
-        renderItem={({ item, section }) => (
-          <View style={styles.itemCard}>
+        renderItem={({ item }) => (
+          <View style={styles.card}>
             <View>
               <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemStock}>Stock: {item.stock}</Text>
+              <Text style={styles.itemDetails}>
+                Qty: {item.quantity} | {item.category}
+              </Text>
             </View>
 
+            {/* Plus Minus Buttons */}
             <View style={styles.actions}>
-              {/* - button */}
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => decreaseStock(section.title, item.id)}
+                onPress={() => updateQuantity(item.id, -1)}
               >
-                <Text style={styles.actionText}>-</Text>
+                <Text style={styles.actionText}>➖</Text>
               </TouchableOpacity>
-
-              {/* + button */}
               <TouchableOpacity
                 style={styles.actionBtn}
-                onPress={() => increaseStock(section.title, item.id)}
+                onPress={() => updateQuantity(item.id, 1)}
               >
-                <Text style={styles.actionText}>+</Text>
-              </TouchableOpacity>
-
-              {/* delete */}
-              <TouchableOpacity
-                style={styles.deleteBtn}
-                onPress={() => removeItem(section.title, item.id)}
-              >
-                <Text style={styles.deleteText}>Delete</Text>
+                <Text style={styles.actionText}>➕</Text>
               </TouchableOpacity>
             </View>
           </View>
         )}
+        renderSectionHeader={({ section }) =>
+          section.data.length > 0 ? (
+            <Text style={styles.sectionHeader}>{section.title}</Text>
+          ) : null
+        }
       />
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#fff", padding: 20 },
-  header: { fontSize: 22, fontWeight: "bold", marginBottom: 15, color: "#6D4C41" },
-  form: { marginBottom: 20 },
-  input: {
-    backgroundColor: "#F5F5F5",
+  container: { flex: 1, padding: 16, backgroundColor: "#f9f9f9" },
+  title: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
+  searchInput: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
     padding: 10,
-    borderRadius: 8,
-    marginBottom: 10,
+    marginBottom: 12,
+    backgroundColor: "#fff",
   },
-  addBtn: {
-    backgroundColor: "#6D4C41",
-    padding: 12,
-    borderRadius: 8,
-    alignItems: "center",
+  input: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 8,
+    backgroundColor: "#fff",
   },
-  addText: { color: "#fff", fontWeight: "bold", fontSize: 14 },
+  picker: {
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    marginBottom: 12,
+    backgroundColor: "#fff",
+  },
   sectionHeader: {
     fontSize: 18,
     fontWeight: "bold",
-    marginTop: 15,
-    marginBottom: 5,
-    color: "#4E342E",
+    marginTop: 20,
+    marginBottom: 8,
+    color: "#333",
   },
-  itemCard: {
-    backgroundColor: "#F5F5F5",
-    padding: 15,
-    borderRadius: 10,
+  card: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    padding: 14,
     marginBottom: 10,
+    borderRadius: 12,
+    backgroundColor: "#fff",
+    shadowColor: "#000",
+    shadowOpacity: 0.1,
+    shadowRadius: 6,
+    elevation: 3,
   },
   itemName: { fontSize: 16, fontWeight: "600" },
-  itemStock: { fontSize: 14, color: "gray" },
-  actions: {
-    flexDirection: "row",
-    marginTop: 10,
-    justifyContent: "flex-end",
-    alignItems: "center",
-  },
+  itemDetails: { fontSize: 14, color: "#555" },
+  actions: { flexDirection: "row" },
   actionBtn: {
-    backgroundColor: "#8D6E63",
-    padding: 8,
-    borderRadius: 6,
-    marginHorizontal: 4,
-  },
-  actionText: { color: "#fff", fontWeight: "bold", fontSize: 16 },
-  deleteBtn: {
-    backgroundColor: "#B71C1C",
-    paddingVertical: 6,
-    paddingHorizontal: 12,
+    marginLeft: 8,
+    backgroundColor: "#eee",
+    padding: 10,
     borderRadius: 8,
-    marginLeft: 10,
   },
-  deleteText: { color: "#fff", fontWeight: "bold", fontSize: 12 },
+  actionText: { fontSize: 18 },
 });
