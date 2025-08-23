@@ -1,137 +1,181 @@
-import { Picker } from "@react-native-picker/picker";
+import { MaterialCommunityIcons } from "@expo/vector-icons"; // for warning icon
 import React, { useState } from "react";
+import { SectionList, StyleSheet, View } from "react-native";
 import {
+  Appbar,
   Button,
-  SectionList,
-  StyleSheet,
+  Card,
+  IconButton,
+  Searchbar,
   Text,
-  TextInput,
-  TouchableOpacity,
-  View
-} from "react-native";
+} from "react-native-paper";
 
-type InventoryItem = {
-  id: string;
-  name: string;
-  quantity: number;
-  category: string;
-};
+export default function InventoryMain({ navigation }) {
+  const [ingredients, setIngredients] = useState([
+    { ingredientName: "Sugar", quantity: 10, category: "Essentials" },
+    { ingredientName: "Milk", quantity: 5, category: "Drinks" },
+    { ingredientName: "Coffee Beans", quantity: 20, category: "Coffee" },
+    { ingredientName: "Chips", quantity: 0, category: "Snacks" },
+  ]);
 
-const categories = ["Coffee", "Pastries", "Snacks", "Drinks"];
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
 
-export default function InventoryScreen() {
-  const [inventory, setInventory] = useState<InventoryItem[]>([]);
-  const [newItem, setNewItem] = useState("");
-  const [newQuantity, setNewQuantity] = useState("");
-  const [selectedCategory, setSelectedCategory] = useState(categories[0]);
-  const [search, setSearch] = useState("");
+  const categories = ["All", "Coffee", "Drinks", "Snacks", "Essentials"];
 
-  const addItem = () => {
-    if (newItem.trim() === "" || newQuantity === "") return;
-    const item: InventoryItem = {
-      id: Math.random().toString(),
-      name: newItem,
-      quantity: parseInt(newQuantity),
-      category: selectedCategory,
-    };
-    setInventory((prev) => [...prev, item]);
-    setNewItem("");
-    setNewQuantity("");
-  };
+  // Filter by search + category
+  const filteredIngredients = ingredients.filter((item) => {
+    const matchesSearch = item.ingredientName
+      .toLowerCase()
+      .includes(searchQuery.toLowerCase());
+    const matchesCategory =
+      !selectedCategory || selectedCategory === "All"
+        ? true
+        : item.category === selectedCategory;
 
-  const updateQuantity = (id: string, change: number) => {
-    setInventory((prev) =>
+    return matchesSearch && matchesCategory;
+  });
+
+  // Group ingredients by category
+  const groupedData = categories
+    .filter((cat) => cat !== "All")
+    .map((cat) => {
+      const sortedItems = filteredIngredients
+        .filter((item) => item.category === cat)
+        .sort((a, b) => {
+          // Out of stock goes last
+          if (a.quantity === 0 && b.quantity !== 0) return 1;
+          if (a.quantity !== 0 && b.quantity === 0) return -1;
+          return a.ingredientName.localeCompare(b.ingredientName);
+        });
+
+      return { title: cat, data: sortedItems };
+    });
+
+  const updateQuantity = (name: string, change: number) => {
+    setIngredients((prev) =>
       prev.map((item) =>
-        item.id === id
+        item.ingredientName === name
           ? { ...item, quantity: Math.max(0, item.quantity + change) }
           : item
       )
     );
   };
 
-  const filteredInventory = inventory.filter((item) =>
-    item.name.toLowerCase().includes(search.toLowerCase())
-  );
-
-  const groupedInventory = categories.map((cat) => ({
-    title: cat,
-    data: filteredInventory.filter((item) => item.category === cat),
-  }));
-
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>📦 Inventory</Text>
+      <Appbar.Header style={{ backgroundColor: "#6D4C41" }}>
+        <Appbar.Content title="Inventory" color="#fff" />
+      </Appbar.Header>
 
       {/* Search Bar */}
-      <TextInput
-        placeholder="🔍 Search items..."
-        style={styles.searchInput}
-        value={search}
-        onChangeText={setSearch}
+      <Searchbar
+        placeholder="Search ingredients..."
+        value={searchQuery}
+        onChangeText={(query) => setSearchQuery(query)}
+        style={styles.searchBar}
       />
 
-      {/* Add New Item */}
-      <TextInput
-        placeholder="Item name"
-        style={styles.input}
-        value={newItem}
-        onChangeText={setNewItem}
-      />
-      <TextInput
-        placeholder="Quantity"
-        style={styles.input}
-        keyboardType="numeric"
-        value={newQuantity}
-        onChangeText={setNewQuantity}
-      />
+      {/* Add Ingredient Button ABOVE categories */}
+      <View style={styles.buttonContainer}>
+        <Button
+          mode="contained"
+          onPress={() => navigation.navigate("AddIngredient")}
+          style={styles.addButton}
+        >
+          Add Ingredient
+        </Button>
+      </View>
 
-      {/* Category Picker */}
-      <Picker
-        selectedValue={selectedCategory}
-        style={styles.picker}
-        onValueChange={(value) => setSelectedCategory(value)}
-      >
+      {/* Category Buttons */}
+      <View style={styles.categoryContainer}>
         {categories.map((cat) => (
-          <Picker.Item key={cat} label={cat} value={cat} />
+          <Button
+            key={cat}
+            mode={selectedCategory === cat ? "contained" : "outlined"}
+            onPress={() =>
+              setSelectedCategory(selectedCategory === cat ? null : cat)
+            }
+            style={styles.categoryButton}
+          >
+            {cat}
+          </Button>
         ))}
-      </Picker>
+      </View>
 
-      <Button title="➕ Add Item" onPress={addItem} />
-
-      {/* Inventory List */}
+      {/* Ingredients List */}
       <SectionList
-        sections={groupedInventory}
-        keyExtractor={(item) => item.id}
+        sections={groupedData}
+        keyExtractor={(item, index) => item.ingredientName + index}
         renderItem={({ item }) => (
-          <View style={styles.card}>
-            <View>
-              <Text style={styles.itemName}>{item.name}</Text>
-              <Text style={styles.itemDetails}>
-                Qty: {item.quantity} | {item.category}
-              </Text>
-            </View>
+          <Card
+            style={[
+              styles.card,
+              item.quantity === 0 ? styles.cardOutOfStock : null,
+            ]}
+          >
+            <Card.Content style={styles.cardContent}>
+              <View
+                style={{ flex: 1, flexDirection: "row", alignItems: "center" }}
+              >
+                {/* Ingredient Name + Warning Icon */}
+                <Text
+                  style={[
+                    styles.name,
+                    item.quantity <= 10 ? styles.lowStockName : null,
+                  ]}
+                >
+                  {item.ingredientName}
+                </Text>
+                {item.quantity <= 10 && item.quantity !== 0 && (
+                  <MaterialCommunityIcons
+                    name="alert-circle"
+                    size={18}
+                    color="red"
+                    style={{ marginLeft: 6 }}
+                  />
+                )}
+              </View>
 
-            {/* Plus Minus Buttons */}
-            <View style={styles.actions}>
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => updateQuantity(item.id, -1)}
-              >
-                <Text style={styles.actionText}>➖</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={styles.actionBtn}
-                onPress={() => updateQuantity(item.id, 1)}
-              >
-                <Text style={styles.actionText}>➕</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+              <View style={{ flex: 1 }}>
+                {/* Quantity display */}
+                <Text
+                  style={
+                    item.quantity === 0 ? styles.outOfStock : styles.inStock
+                  }
+                >
+                  {item.quantity === 0
+                    ? "Out of Stock"
+                    : `Quantity: ${item.quantity}`}
+                </Text>
+              </View>
+
+              <View style={styles.actions}>
+                <IconButton
+                  icon="minus"
+                  size={20}
+                  onPress={() => updateQuantity(item.ingredientName, -1)}
+                />
+                <IconButton
+                  icon="plus"
+                  size={20}
+                  onPress={() => updateQuantity(item.ingredientName, 1)}
+                />
+              </View>
+            </Card.Content>
+          </Card>
         )}
-        renderSectionHeader={({ section }) =>
-          section.data.length > 0 ? (
-            <Text style={styles.sectionHeader}>{section.title}</Text>
+        renderSectionHeader={({ section: { title } }) =>
+          groupedData.find((s) => s.title === title)?.data.length > 0 ? (
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>{title}</Text>
+            </View>
           ) : null
+        }
+        ListEmptyComponent={
+          <View style={styles.emptyContainer}>
+            <Text>No ingredients found.</Text>
+          </View>
         }
       />
     </View>
@@ -139,59 +183,83 @@ export default function InventoryScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, padding: 16, backgroundColor: "#f9f9f9" },
-  title: { fontSize: 22, fontWeight: "bold", marginBottom: 16 },
-  searchInput: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 12,
+  container: {
+    flex: 1,
     backgroundColor: "#fff",
   },
-  input: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    padding: 10,
-    marginBottom: 8,
-    backgroundColor: "#fff",
-  },
-  picker: {
-    borderWidth: 1,
-    borderColor: "#ddd",
-    borderRadius: 12,
-    marginBottom: 12,
-    backgroundColor: "#fff",
-  },
-  sectionHeader: {
-    fontSize: 18,
-    fontWeight: "bold",
-    marginTop: 20,
-    marginBottom: 8,
-    color: "#333",
-  },
-  card: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    padding: 14,
-    marginBottom: 10,
-    borderRadius: 12,
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  itemName: { fontSize: 16, fontWeight: "600" },
-  itemDetails: { fontSize: 14, color: "#555" },
-  actions: { flexDirection: "row" },
-  actionBtn: {
-    marginLeft: 8,
-    backgroundColor: "#eee",
-    padding: 10,
+  searchBar: {
+    margin: 12,
     borderRadius: 8,
   },
-  actionText: { fontSize: 18 },
+  buttonContainer: {
+    paddingHorizontal: 12,
+    marginBottom: 8,
+  },
+  addButton: {
+    borderRadius: 8,
+    backgroundColor: "#6D4C41",
+    paddingVertical: 6,
+  },
+  categoryContainer: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    marginBottom: 10,
+  },
+  categoryButton: {
+    margin: 4,
+    borderRadius: 20,
+  },
+  emptyContainer: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 20,
+  },
+  sectionHeader: {
+    backgroundColor: "#EFEFEF",
+    paddingVertical: 6,
+    paddingHorizontal: 12,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#6D4C41",
+  },
+  card: {
+    marginHorizontal: 10,
+    marginVertical: 4,
+    borderRadius: 8,
+    elevation: 2,
+  },
+  cardOutOfStock: {
+    opacity: 0.6, // dim whole card if out of stock
+  },
+  cardContent: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  name: {
+    fontSize: 16,
+    fontWeight: "bold",
+    color: "#000",
+  },
+  lowStockName: {
+    color: "red",
+  },
+  inStock: {
+    fontSize: 14,
+    color: "#333",
+  },
+  outOfStock: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "gray", // gray instead of red
+    fontStyle: "italic",
+  },
+  actions: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
 });
