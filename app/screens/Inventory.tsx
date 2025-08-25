@@ -111,7 +111,7 @@ export default function InventoryMain({ navigation }) {
           <Card
             style={[
               styles.card,
-              item.quantity === 0 ? styles.cardOutOfStock : null,
+              item.quantity === 0 ? styles.outOfStockCard : null,
             ]}
           >
             <Card.Content style={styles.cardContent}>
@@ -127,7 +127,7 @@ export default function InventoryMain({ navigation }) {
                 >
                   {item.ingredientName}
                 </Text>
-                {item.quantity <= 10 && item.quantity !== 0 && (
+                {item.quantity > 0 && item.quantity <= 10 && (
                   <MaterialCommunityIcons
                     name="alert-circle"
                     size={18}
@@ -140,9 +140,13 @@ export default function InventoryMain({ navigation }) {
               <View style={{ flex: 1 }}>
                 {/* Quantity display */}
                 <Text
-                  style={
-                    item.quantity === 0 ? styles.outOfStock : styles.inStock
-                  }
+                  style={[
+                    item.quantity === 0
+                      ? styles.outOfStock
+                      : item.quantity <= 10
+                      ? styles.lowStockQty
+                      : styles.inStock,
+                  ]}
                 >
                   {item.quantity === 0
                     ? "Out of Stock"
@@ -150,16 +154,20 @@ export default function InventoryMain({ navigation }) {
                 </Text>
               </View>
 
+              {/* Actions */}
               <View style={styles.actions}>
                 <IconButton
                   icon="minus"
                   size={20}
                   onPress={() => updateQuantity(item.ingredientName, -1)}
+                  disabled={item.quantity === 0}
+                  iconColor={item.quantity === 0 ? "gray" : "black"}
                 />
                 <IconButton
                   icon="plus"
                   size={20}
                   onPress={() => updateQuantity(item.ingredientName, 1)}
+                  iconColor="black"
                 />
               </View>
             </Card.Content>
@@ -231,9 +239,11 @@ const styles = StyleSheet.create({
     marginVertical: 4,
     borderRadius: 8,
     elevation: 2,
+    backgroundColor: "#fff",
   },
-  cardOutOfStock: {
-    opacity: 0.6, // dim whole card if out of stock
+  outOfStockCard: {
+    backgroundColor: "#f2f2f2", // light gray background
+    opacity: 0.7, // dimmed effect
   },
   cardContent: {
     flexDirection: "row",
@@ -252,11 +262,15 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: "#333",
   },
+  lowStockQty: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "red", // red when below 10
+  },
   outOfStock: {
     fontSize: 14,
     fontWeight: "bold",
-    color: "gray", // gray instead of red
-    fontStyle: "italic",
+    color: "gray", // grayed out when 0
   },
   actions: {
     flexDirection: "row",
