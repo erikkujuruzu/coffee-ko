@@ -1,7 +1,16 @@
-import { endOfWeek, format, isWithinInterval, parseISO, startOfWeek } from "date-fns";
+import {
+  eachWeekOfInterval,
+  endOfMonth,
+  endOfWeek,
+  format,
+  isWithinInterval,
+  parseISO,
+  startOfMonth,
+  startOfWeek,
+} from "date-fns";
 import React, { useMemo, useState } from "react";
 import { Dimensions, ScrollView, StyleSheet, View } from "react-native";
-import { BarChart, LineChart } from "react-native-chart-kit";
+import { BarChart } from "react-native-chart-kit";
 import DateTimePickerModal from "react-native-modal-datetime-picker";
 import {
   Appbar,
@@ -13,7 +22,9 @@ import {
 } from "react-native-paper";
 
 export default function ReportsTab() {
-  const [viewType, setViewType] = useState<"daily" | "weekly" | "monthly">("daily");
+  const [viewType, setViewType] = useState<"daily" | "weekly" | "monthly">(
+    "daily"
+  );
   const [selectedDate, setSelectedDate] = useState("2025-08-15");
   const [showDatePicker, setShowDatePicker] = useState(false);
 
@@ -26,6 +37,10 @@ export default function ReportsTab() {
       end: endOfWeek(now, { weekStartsOn: 1 }),
     };
   });
+
+  // Month picker state
+  const [showMonthPicker, setShowMonthPicker] = useState(false);
+  const [selectedMonth, setSelectedMonth] = useState(new Date());
 
   // Dummy simulated sales data
   const salesData = useMemo(
@@ -40,20 +55,6 @@ export default function ReportsTab() {
     ],
     []
   );
-
-  // Aggregate totals (weekly/monthly)
-  const aggregateData = () => {
-    const grouped: Record<string, number> = {};
-    for (const sale of salesData) {
-      const revenue = sale.quantity * sale.price;
-      let key = "";
-      if (viewType === "daily") key = sale.date;
-      else if (viewType === "weekly") key = "Week of " + sale.date.slice(0, 7);
-      else if (viewType === "monthly") key = sale.date.slice(0, 7);
-      grouped[key] = (grouped[key] || 0) + revenue;
-    }
-    return grouped;
-  };
 
   // Daily breakdown
   const dailyBreakdown = (date: string) => {
@@ -88,18 +89,50 @@ export default function ReportsTab() {
     return grouped;
   };
 
-  // Derived summary
-  const grouped = aggregateData();
-  const labels = Object.keys(grouped);
-  const dataPoints = Object.values(grouped);
+  // Monthly breakdown
+  const monthlyBreakdown = (month: Date) => {
+    const monthStart = startOfMonth(month);
+    const monthEnd = endOfMonth(month);
 
-  const totalRevenue = useMemo(
-    () => dataPoints.reduce((a, b) => a + b, 0),
-    [dataPoints]
-  );
-  const totalTransactions = salesData.length;
+    const weeks = eachWeekOfInterval(
+      { start: monthStart, end: monthEnd },
+      { weekStartsOn: 1 }
+    );
 
-  // Date picker
+    const weekRevenues: number[] = [];
+    const weekLabels: string[] = [];
+
+    weeks.forEach((weekStart, i) => {
+      const weekEnd = endOfWeek(weekStart, { weekStartsOn: 1 });
+      let total = 0;
+      salesData.forEach((sale) => {
+        const d = parseISO(sale.date);
+        if (isWithinInterval(d, { start: weekStart, end: weekEnd })) {
+          total += sale.quantity * sale.price;
+        }
+      });
+      weekRevenues.push(total);
+      weekLabels.push(`Week ${i + 1}`);
+    });
+
+    const productGrouped: Record<string, { qty: number; revenue: number }> = {};
+    salesData
+      .filter((s) => {
+        const d = parseISO(s.date);
+        return isWithinInterval(d, { start: monthStart, end: monthEnd });
+      })
+      .forEach((sale) => {
+        if (!productGrouped[sale.product]) {
+          productGrouped[sale.product] = { qty: 0, revenue: 0 };
+        }
+        productGrouped[sale.product].qty += sale.quantity;
+        productGrouped[sale.product].revenue += sale.quantity * sale.price;
+      });
+
+    return { weekLabels, weekRevenues, productGrouped };
+  };
+
+  // Date picker confirm
   const handleDateConfirm = (date: Date) => {
     const isoDate = date.toISOString().split("T")[0];
     setSelectedDate(isoDate);
@@ -112,6 +145,12 @@ export default function ReportsTab() {
     const end = endOfWeek(date, { weekStartsOn: 1 });
     setSelectedWeek({ start, end });
     setShowWeekPicker(false);
+  };
+
+  // Month picker confirm
+  const handleMonthConfirm = (date: Date) => {
+    setSelectedMonth(date);
+    setShowMonthPicker(false);
   };
 
   return (
@@ -136,27 +175,10 @@ export default function ReportsTab() {
       </View>
 
       <ScrollView>
-        {/* Summary cards */}
-        <View style={styles.summaryContainer}>
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text style={styles.cardTitle}>Total Sales</Text>
-              <Text style={styles.cardValue}>₱{totalRevenue}</Text>
-            </Card.Content>
-          </Card>
-          <Card style={styles.card}>
-            <Card.Content>
-              <Text style={styles.cardTitle}>Transactions</Text>
-              <Text style={styles.cardValue}>{totalTransactions}</Text>
-            </Card.Content>
-          </Card>
-        </View>
-
-        {/* MAIN CONTENT */}
         <View style={{ alignItems: "center", marginVertical: 10 }}>
           {viewType === "daily" ? (
+            // 🔹 DAILY VIEW
             <View style={{ width: Dimensions.get("window").width - 20 }}>
-              {/* Date selector */}
               <Button
                 mode="outlined"
                 onPress={() => setShowDatePicker(true)}
@@ -171,16 +193,14 @@ export default function ReportsTab() {
                 onCancel={() => setShowDatePicker(false)}
               />
 
-              {/* Daily revenue by product */}
               {(() => {
                 const breakdown = dailyBreakdown(selectedDate);
-                const totalForDate = Object.values(breakdown).reduce(
-                  (sum, d) => sum + d.revenue,
-                  0
-                );
-
                 const ranked = Object.entries(breakdown).sort(
                   (a, b) => b[1].revenue - a[1].revenue
+                );
+                const totalForDay = ranked.reduce(
+                  (sum, [, d]) => sum + d.revenue,
+                  0
                 );
 
                 return (
@@ -195,14 +215,13 @@ export default function ReportsTab() {
                       }}
                       width={Dimensions.get("window").width - 30}
                       height={250}
-                      fromZero={true}
+                      fromZero
                       yAxisLabel="₱"
-                      yAxisSuffix=""   // ✅ FIX
+                      yAxisSuffix=""
                       chartConfig={chartConfig}
                       style={{ borderRadius: 12, marginBottom: 12 }}
                     />
 
-                    {/* Product breakdown */}
                     <Card style={{ marginHorizontal: 5, borderRadius: 12 }}>
                       <Card.Content>
                         <Text style={styles.breakdownTitle}>
@@ -211,39 +230,17 @@ export default function ReportsTab() {
                         <Divider style={{ marginVertical: 6 }} />
                         {ranked.map(([prod, details], i) => {
                           const share =
-                            totalForDate > 0
-                              ? details.revenue / totalForDate
+                            totalForDay > 0
+                              ? details.revenue / totalForDay
                               : 0;
-                          const isLow = details.qty <= 10 && details.qty > 0;
-                          const isZero = details.qty === 0;
-
                           return (
                             <View key={i} style={{ marginBottom: 10 }}>
                               <View style={styles.row}>
-                                <Text
-                                  style={[
-                                    styles.prodName,
-                                    isZero
-                                      ? styles.outOfStockText
-                                      : isLow
-                                      ? styles.lowText
-                                      : null,
-                                  ]}
-                                >
+                                <Text style={styles.prodName}>
                                   {i + 1}. {prod}
                                 </Text>
-                                <Text
-                                  style={[
-                                    styles.prodRight,
-                                    isZero
-                                      ? styles.outOfStockText
-                                      : isLow
-                                      ? styles.lowText
-                                      : null,
-                                  ]}
-                                >
-                                  {isZero ? "0 pcs" : `${details.qty} pcs`} · ₱
-                                  {details.revenue}
+                                <Text style={styles.prodRight}>
+                                  {details.qty} pcs · ₱{details.revenue}
                                 </Text>
                               </View>
                               <ProgressBar
@@ -255,7 +252,7 @@ export default function ReportsTab() {
                         })}
                         <Divider style={{ marginTop: 8 }} />
                         <Text style={{ marginTop: 8, fontWeight: "bold" }}>
-                          Total: ₱{totalForDate}
+                          Total: ₱{totalForDay}
                         </Text>
                       </Card.Content>
                     </Card>
@@ -264,8 +261,8 @@ export default function ReportsTab() {
               })()}
             </View>
           ) : viewType === "weekly" ? (
+            // 🔹 WEEKLY VIEW
             <View style={{ width: Dimensions.get("window").width - 20 }}>
-              {/* Week selector */}
               <Button
                 mode="outlined"
                 onPress={() => setShowWeekPicker(true)}
@@ -284,18 +281,40 @@ export default function ReportsTab() {
                 onCancel={() => setShowWeekPicker(false)}
               />
 
-              {/* Weekly revenue by product */}
               {(() => {
-                const breakdown = weeklyBreakdown(
+                // Build days of the week
+                const days: Date[] = [];
+                for (
+                  let d = selectedWeek.start;
+                  d <= selectedWeek.end;
+                  d = new Date(d.getTime() + 86400000)
+                ) {
+                  days.push(new Date(d));
+                }
+
+                const dayLabels: string[] = [];
+                const dayRevenues: number[] = [];
+                days.forEach((day) => {
+                  const dailySales = salesData.filter((s) =>
+                    isWithinInterval(parseISO(s.date), {
+                      start: day,
+                      end: day,
+                    })
+                  );
+                  const revenue = dailySales.reduce(
+                    (sum, s) => sum + s.quantity * s.price,
+                    0
+                  );
+                  dayLabels.push(format(day, "EEE"));
+                  dayRevenues.push(revenue);
+                });
+
+                const totalForWeek = dayRevenues.reduce((a, b) => a + b, 0);
+                const productGrouped = weeklyBreakdown(
                   selectedWeek.start,
                   selectedWeek.end
                 );
-                const totalForWeek = Object.values(breakdown).reduce(
-                  (sum, d) => sum + d.revenue,
-                  0
-                );
-
-                const ranked = Object.entries(breakdown).sort(
+                const ranked = Object.entries(productGrouped).sort(
                   (a, b) => b[1].revenue - a[1].revenue
                 );
 
@@ -303,25 +322,30 @@ export default function ReportsTab() {
                   <>
                     <Text style={styles.sectionHeader}>
                       {format(selectedWeek.start, "MMM d")} -{" "}
-                      {format(selectedWeek.end, "MMM d, yyyy")} – Revenue by
-                      Product
+                      {format(selectedWeek.end, "MMM d, yyyy")} – Revenue per
+                      Day
                     </Text>
                     <BarChart
                       data={{
-                        labels: ranked.map(([prod]) => prod),
-                        datasets: [{ data: ranked.map(([_, d]) => d.revenue) }],
+                        labels: dayLabels,
+                        datasets: [{ data: dayRevenues }],
                       }}
                       width={Dimensions.get("window").width - 30}
                       height={250}
-                      fromZero={true}
+                      fromZero
                       yAxisLabel="₱"
-                      yAxisSuffix=""   // ✅ FIX
+                      yAxisSuffix=""
                       chartConfig={chartConfig}
                       style={{ borderRadius: 12, marginBottom: 12 }}
                     />
 
-                    {/* Product breakdown */}
-                    <Card style={{ marginHorizontal: 5, borderRadius: 12 }}>
+                    <Card
+                      style={{
+                        marginHorizontal: 5,
+                        marginTop: 12,
+                        borderRadius: 12,
+                      }}
+                    >
                       <Card.Content>
                         <Text style={styles.breakdownTitle}>
                           Products (High → Low)
@@ -332,36 +356,14 @@ export default function ReportsTab() {
                             totalForWeek > 0
                               ? details.revenue / totalForWeek
                               : 0;
-                          const isLow = details.qty <= 10 && details.qty > 0;
-                          const isZero = details.qty === 0;
-
                           return (
                             <View key={i} style={{ marginBottom: 10 }}>
                               <View style={styles.row}>
-                                <Text
-                                  style={[
-                                    styles.prodName,
-                                    isZero
-                                      ? styles.outOfStockText
-                                      : isLow
-                                      ? styles.lowText
-                                      : null,
-                                  ]}
-                                >
+                                <Text style={styles.prodName}>
                                   {i + 1}. {prod}
                                 </Text>
-                                <Text
-                                  style={[
-                                    styles.prodRight,
-                                    isZero
-                                      ? styles.outOfStockText
-                                      : isLow
-                                      ? styles.lowText
-                                      : null,
-                                  ]}
-                                >
-                                  {isZero ? "0 pcs" : `${details.qty} pcs`} · ₱
-                                  {details.revenue}
+                                <Text style={styles.prodRight}>
+                                  {details.qty} pcs · ₱{details.revenue}
                                 </Text>
                               </View>
                               <ProgressBar
@@ -382,18 +384,87 @@ export default function ReportsTab() {
               })()}
             </View>
           ) : (
-            <LineChart
-              data={{
-                labels,
-                datasets: [{ data: dataPoints }],
-              }}
-              width={Dimensions.get("window").width - 30}
-              height={220}
-              yAxisLabel="₱"
-              chartConfig={chartConfig}
-              bezier
-              style={{ borderRadius: 12 }}
-            />
+            // 🔹 MONTHLY VIEW
+            <View style={{ width: Dimensions.get("window").width - 20 }}>
+              <Button
+                mode="outlined"
+                onPress={() => setShowMonthPicker(true)}
+                style={{ marginBottom: 10 }}
+              >
+                Select Month (Current: {format(selectedMonth, "MMMM yyyy")})
+              </Button>
+              <DateTimePickerModal
+                isVisible={showMonthPicker}
+                mode="date"
+                onConfirm={handleMonthConfirm}
+                onCancel={() => setShowMonthPicker(false)}
+              />
+
+              {(() => {
+                const { weekLabels, weekRevenues, productGrouped } =
+                  monthlyBreakdown(selectedMonth);
+                const totalForMonth = weekRevenues.reduce((a, b) => a + b, 0);
+                const ranked = Object.entries(productGrouped).sort(
+                  (a, b) => b[1].revenue - a[1].revenue
+                );
+
+                return (
+                  <>
+                    <Text style={styles.sectionHeader}>
+                      {format(selectedMonth, "MMMM yyyy")} – Revenue by Week
+                    </Text>
+                    <BarChart
+                      data={{
+                        labels: weekLabels,
+                        datasets: [{ data: weekRevenues }],
+                      }}
+                      width={Dimensions.get("window").width - 30}
+                      height={250}
+                      fromZero
+                      yAxisLabel="₱"
+                      yAxisSuffix=""
+                      chartConfig={chartConfig}
+                      style={{ borderRadius: 12, marginBottom: 12 }}
+                    />
+
+                    <Card style={{ marginHorizontal: 5, borderRadius: 12 }}>
+                      <Card.Content>
+                        <Text style={styles.breakdownTitle}>
+                          Products (High → Low)
+                        </Text>
+                        <Divider style={{ marginVertical: 6 }} />
+                        {ranked.map(([prod, details], i) => {
+                          const share =
+                            totalForMonth > 0
+                              ? details.revenue / totalForMonth
+                              : 0;
+                          return (
+                            <View key={i} style={{ marginBottom: 10 }}>
+                              <View style={styles.row}>
+                                <Text style={styles.prodName}>
+                                  {i + 1}. {prod}
+                                </Text>
+                                <Text style={styles.prodRight}>
+                                  {details.qty} pcs · ₱{details.revenue}
+                                </Text>
+                              </View>
+                              <ProgressBar
+                                progress={share}
+                                style={styles.progress}
+                              />
+                            </View>
+                          );
+                        })}
+                        <Divider style={{ marginTop: 8 }} />
+                        <Text style={{ marginTop: 8, fontWeight: "bold" }}>
+                          Total: ₱{totalForMonth}
+                        </Text>
+                      </Card.Content>
+                    </Card>
+                  </>
+                );
+              })()}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -419,14 +490,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
   },
   toggleBtn: { flex: 1, marginHorizontal: 4 },
-  summaryContainer: {
-    flexDirection: "row",
-    justifyContent: "space-around",
-    marginVertical: 10,
-  },
-  card: { flex: 1, marginHorizontal: 6, borderRadius: 10, elevation: 3 },
-  cardTitle: { fontSize: 14, color: "#6D4C41" },
-  cardValue: { fontSize: 18, fontWeight: "bold", marginTop: 4 },
   sectionHeader: { fontWeight: "bold", fontSize: 16, marginBottom: 8 },
   breakdownTitle: { fontSize: 16, fontWeight: "bold" },
   row: {
@@ -437,6 +500,4 @@ const styles = StyleSheet.create({
   prodName: { fontSize: 14, fontWeight: "600" },
   prodRight: { fontSize: 13 },
   progress: { height: 6, borderRadius: 6, marginTop: 6 },
-  lowText: { color: "red", fontWeight: "bold" },
-  outOfStockText: { color: "gray", fontStyle: "italic" },
 });
