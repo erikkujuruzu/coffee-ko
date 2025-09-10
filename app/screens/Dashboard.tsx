@@ -19,6 +19,12 @@ const mockInventoryData = [
   { product: "Milk", stock: 1, lowStockThreshold: 3 },
 ];
 
+// 🔹 Generate distinct HSL colors
+const getColor = (index: number) => {
+  const hue = (index * 67) % 360;
+  return `hsl(${hue}, 70%, 50%)`;
+};
+
 export default function Dashboard() {
   const salesData = mockSalesData;
   const inventoryData = mockInventoryData;
@@ -44,7 +50,7 @@ export default function Dashboard() {
     return sorted.length > 0 ? sorted[0][0] : "N/A";
   })();
 
-  // Product revenue share for PieChart (safe version)
+  // Product revenue share for PieChart (with %)
   const productRevenueData = (() => {
     const grouped: Record<string, number> = {};
     todaySales.forEach((s) => {
@@ -52,17 +58,24 @@ export default function Dashboard() {
         (grouped[s.product] || 0) + s.quantity * s.price;
     });
 
-    const colors = ["#FF6384", "#36A2EB", "#FFCE56", "#8BC34A", "#FF9800"];
+    const total = Object.values(grouped).reduce(
+      (sum, val) => sum + val,
+      0
+    );
 
     return Object.entries(grouped)
-      .filter(([_, revenue]) => typeof revenue === "number" && revenue > 0)
-      .map(([product, revenue], i) => ({
-        name: product,
-        population: Number(revenue),
-        color: colors[i % colors.length] || "#999", // always defined
-        legendFontColor: "#333",
-        legendFontSize: 14,
-      }));
+      .map(([product, revenue], i) => {
+        const percent =
+          total > 0 ? ((revenue / total) * 100).toFixed(1) : "0";
+        return {
+          name: `${product} (${percent}%)`, // ✅ show % in legend
+          population: revenue,
+          color: getColor(i),
+          legendFontColor: "#333",
+          legendFontSize: 14,
+        };
+      })
+      .filter((item) => item.population > 0);
   })();
 
   // Low stock alerts
